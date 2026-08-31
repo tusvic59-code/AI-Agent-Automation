@@ -4,7 +4,6 @@
 
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
 from typing import List, Dict, Any
 import json
 
@@ -19,7 +18,6 @@ class AIAgent:
         """
         پردازش دستور کاربر
         """
-        # اضافه کردن به تاریخچه
         self.history.append({
             'type': 'command',
             'content': command
@@ -37,41 +35,50 @@ class AIAgent:
             return "ایمیل را ارسال می‌کنم..."
         
         else:
-            return f"دستور شما: {command}\nچگونه می‌تونم کمکتون کنم؟"
+            return f"دستور شما: {command}\nچگونه می‌توانم کمکتون کنم؟"
     
     def search_internet(self, query: str) -> List[Dict[str, str]]:
         """
-        جستجو در اینترنت
+        جستجو در اینترنت با DuckDuckGo (بدون نیاز به API)
         """
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
-            # استفاده از Google search
-            url = f"https://www.google.com/search?q={query}"
+            print(f"🔍 در حال جستجو برای: {query}")
+            
+            # استفاده از DuckDuckGo
+            url = f"https://html.duckduckgo.com/?q={query}&t=h_&ia=web"
             response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 results = []
                 
-                for g in soup.find_all('div', class_='g'):
-                    title_elem = g.find('h3')
-                    link_elem = g.find('a')
+                for result in soup.find_all('div', class_='result'):
+                    title_elem = result.find('a', class_='result__title')
+                    link_elem = result.find('a', class_='result__url')
                     
                     if title_elem and link_elem:
-                        title = title_elem.text
+                        title = title_elem.get_text(strip=True)
                         link = link_elem.get('href', '')
-                        results.append({
-                            'title': title,
-                            'link': link
-                        })
+                        
+                        if title and link:
+                            results.append({
+                                'title': title,
+                                'link': link
+                            })
                 
-                return results[:10]
+                if results:
+                    return results[:10]
+                else:
+                    return [{'title': '❌ نتیجه‌ای یافت نشد', 'link': ''}]
+            
+            return [{'title': '❌ خطا در دریافت اطلاعات', 'link': ''}]
         
         except Exception as e:
-            return [{'title': f'خطا: {str(e)}', 'link': ''}]
+            return [{'title': f'❌ خطا: {str(e)}', 'link': ''}]
     
     def analyze_file(self, file_path: str) -> str:
         """
@@ -79,25 +86,35 @@ class AIAgent:
         """
         try:
             if file_path.endswith('.csv'):
-                df = pd.read_csv(file_path)
-                return f"فایل CSV: {df.shape[0]} سطر، {df.shape[1]} ستون\n\nآمار:\n{df.describe().to_string()}"
+                try:
+                    import pandas as pd
+                    df = pd.read_csv(file_path)
+                    return f"📊 فایل CSV: {df.shape[0]} سطر، {df.shape[1]} ستون\n\n📈 آمار:\n{df.describe().to_string()}"
+                except:
+                    return "⚠️ نیاز به pandas برای تجزیه CSV دارید"
             
             elif file_path.endswith('.xlsx'):
-                df = pd.read_excel(file_path)
-                return f"فایل Excel: {df.shape[0]} سطر، {df.shape[1]} ستون\n\nآمار:\n{df.describe().to_string()}"
+                try:
+                    import pandas as pd
+                    df = pd.read_excel(file_path)
+                    return f"📊 فایل Excel: {df.shape[0]} سطر، {df.shape[1]} ستون\n\n📈 آمار:\n{df.describe().to_string()}"
+                except:
+                    return "⚠️ نیاز به pandas و openpyxl برای تجزیه Excel دارید"
             
             elif file_path.endswith('.json'):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                return f"فایل JSON تحلیل شد:\n{json.dumps(data, ensure_ascii=False, indent=2)[:500]}..."
+                return f"📄 فایل JSON تحلیل شد:\n{json.dumps(data, ensure_ascii=False, indent=2)[:500]}..."
             
             else:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                return f"محتوای فایل ({len(content)} کاراکتر):\n{content[:500]}..."
+                return f"📝 محتوای فایل ({len(content)} کاراکتر):\n{content[:500]}..."
         
+        except FileNotFoundError:
+            return f"❌ فایل '{file_path}' یافت نشد"
         except Exception as e:
-            return f"خطا در تجزیه فایل: {str(e)}"
+            return f"❌ خطا در تجزیه فایل: {str(e)}"
     
     def get_history(self) -> List[Dict]:
         """دریافت تاریخچه دستورات"""
